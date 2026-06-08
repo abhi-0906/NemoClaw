@@ -92,8 +92,10 @@ ENV NPM_CONFIG_AUDIT=false \
 RUN npm ci --omit=dev
 COPY scripts/patch-openclaw-tool-catalog.js /usr/local/lib/nemoclaw/patch-openclaw-tool-catalog.js
 COPY scripts/patch-openclaw-chat-send.js /usr/local/lib/nemoclaw/patch-openclaw-chat-send.js
+COPY scripts/patch-openclaw-slack-deny-feedback.js /usr/local/lib/nemoclaw/patch-openclaw-slack-deny-feedback.js
 RUN chmod 755 /usr/local/lib/nemoclaw/patch-openclaw-tool-catalog.js \
-        /usr/local/lib/nemoclaw/patch-openclaw-chat-send.js
+        /usr/local/lib/nemoclaw/patch-openclaw-chat-send.js \
+        /usr/local/lib/nemoclaw/patch-openclaw-slack-deny-feedback.js
 
 # Upgrade OpenClaw if the base image is stale.
 #
@@ -579,6 +581,18 @@ RUN NEMOCLAW_OPENCLAW_MANAGED_PROXY=0 node --experimental-strip-types /usr/local
 
 # hadolint ignore=DL3059,DL4006
 RUN python3 /usr/local/lib/nemoclaw/openclaw-build-messaging-plugins.py
+
+# Patch the OpenClaw Slack channel (@openclaw/slack) so a denied explicit
+# @-mention still blocks the command but sends one bounded sender-facing
+# feedback message instead of dropping silently (NemoClaw #4752). The script
+# classifies the installed Slack dist by content signature, fails the build if
+# a @openclaw/slack package is present but the deny path shape is unrecognized,
+# and is a no-op when the Slack channel is not enabled for this image.
+# Removal criteria: drop when upstream OpenClaw notifies the sender on a denied
+# explicit Slack @-mention, or when NemoClaw no longer ships @openclaw/slack.
+# hadolint ignore=DL3059
+RUN node /usr/local/lib/nemoclaw/patch-openclaw-slack-deny-feedback.js \
+    /sandbox/.openclaw /usr/local/lib/node_modules
 
 # Lock down npm for the next RUN: the local OpenClaw plugin install must
 # resolve from /opt/nemoclaw and the staged plugin-runtime-deps tree without
