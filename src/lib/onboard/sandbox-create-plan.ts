@@ -33,7 +33,7 @@ export type {
 // the create-time policy decision.
 const KNOWN_POLICY_TIER_NAMES = new Set(["restricted", "balanced", "open"]);
 
-function readPolicyTierEnv(): string | null {
+export function readPolicyTierEnv(): string | null {
   // Only trust the env value in non-interactive mode. Interactive flows let the
   // operator override the tier via the selector after sandbox creation; if the
   // env said balanced but the operator picks restricted, an interactive trust
@@ -212,6 +212,11 @@ function compareCredentialsForPrimarySelection(
   );
 }
 
+/** Primary messaging credential env keys in the shape intent resolution expects. */
+export function getPrimarySandboxCreateCredentialEnvKeys(): string[] {
+  return [...getPrimaryCredentialEnvKeys()];
+}
+
 export function resolveSandboxCreateMessagingProviderRequests(
   messagingTokenDefs: readonly MessagingTokenDef[],
   getMessagingChannelForEnvKey: (envKey: string) => string | null,
@@ -329,6 +334,19 @@ function bindMessagingTokenDefs(
     }
     return tokenDef;
   });
+}
+
+/**
+ * Run the same credential-binding pass `materializeSandboxCreatePlan` applies,
+ * without any materialization effects. Exported so the pre-destructive intent
+ * gate (#6226) validates against the single binding implementation and throws
+ * the identical drift errors.
+ */
+export function validateSandboxCreateIntentCredentialBindings(
+  intent: SandboxCreateIntent,
+  messagingTokenDefs: readonly MessagingTokenDef[],
+): void {
+  bindMessagingTokenDefs(intent, messagingTokenDefs);
 }
 
 export function materializeSandboxCreatePlan({

@@ -13,6 +13,10 @@ import {
   prepareCreateSandboxMessaging as defaultPrepareCreateSandboxMessaging,
   type NamedMessagingChannel,
 } from "./messaging-prep";
+import {
+  type CompleteSandboxCreateIntentDraftInput,
+  completeSandboxCreateIntentDraft as defaultCompleteSandboxCreateIntentDraft,
+} from "./sandbox-create-intent-gate";
 
 export interface SandboxMessagingPreflightInput {
   sandboxName: string;
@@ -54,6 +58,7 @@ export interface SandboxMessagingPreflightDeps {
     input: CreateSandboxMessagingPrepInput,
   ) => CreateSandboxMessagingPrepResult;
   enforceMessagingChannelConflicts?: (deps: MessagingConflictGuardDeps) => Promise<void>;
+  completeSandboxCreateIntentDraft?: (input: CompleteSandboxCreateIntentDraftInput) => unknown;
 }
 
 export interface SandboxMessagingPreflightResult extends CreateSandboxMessagingPrepResult {
@@ -89,6 +94,20 @@ export async function prepareSandboxMessagingPreflight(
     deps.error(`  Re-run with ${envKey} set, or disable web search before recreating the sandbox.`);
     deps.exitProcess(1);
   }
+
+  // #6226: with the machine sandbox phase's intent draft open, resolve and
+  // validate the complete create intent here — before any destructive
+  // recreate effect — and stage it in memory. Without an open draft
+  // (non-machine callers) completion is a no-op. Validation failures
+  // propagate exactly like the preflight aborts above. This also validates
+  // on flows that subsequently reuse the live sandbox, which previously
+  // never ran binding validation; the check is self-consistent, so only
+  // pathological duplicate token defs can newly abort there.
+  (deps.completeSandboxCreateIntentDraft ?? defaultCompleteSandboxCreateIntentDraft)({
+    input,
+    result,
+    getMessagingChannelForEnvKey: deps.getMessagingChannelForEnvKey,
+  });
 
   return { ...result, disabledChannels };
 }
